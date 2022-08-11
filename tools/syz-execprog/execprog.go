@@ -31,6 +31,8 @@ import (
 var (
 	flagOS        = flag.String("os", runtime.GOOS, "target os")
 	flagArch      = flag.String("arch", runtime.GOARCH, "target arch")
+	flagSave	= flag.String("save", "", "save program binary")
+
 	flagCoverFile = flag.String("coverfile", "", "write coverage to the file")
 	flagRepeat    = flag.Int("repeat", 1, "repeat execution that many times (0 for infinite loop)")
 	flagProcs     = flag.Int("procs", 2*runtime.NumCPU(), "number of parallel processes to execute programs")
@@ -167,6 +169,26 @@ func (ctx *Context) execute(pid int, env *ipc.Env, p *prog.Prog) {
 	if *flagOutput {
 		ctx.logProgram(pid, p, callOpts)
 	}
+
+	var progdata []byte
+	progdata = make([]byte, 4 << 20)
+	progSize, err := p.SerializeForExec(progdata)
+	if err != nil {
+		fmt.Println("SerializeForExec failed", err.Error())
+		os.Exit(2)
+	}
+	fmt.Printf("==================== Program Data ================\n")
+	fmt.Printf("%v %v\n", progdata[:progSize], progSize)
+	fmt.Printf("==================== Program Data ================\n")
+	fileObj, err := os.OpenFile(*flagSave, os.O_RDWR | os.O_CREATE | os.O_TRUNC, 0644)
+	if err != nil {
+		fmt.Println("Failed to open the file", err.Error())
+		os.Exit(2)
+	}
+	defer fileObj.Close()
+	fileObj.Write(progdata[:progSize])
+	os.Exit(2)
+
 	// This mimics the syz-fuzzer logic. This is important for reproduction.
 	for try := 0; ; try++ {
 		output, info, hanged, err := env.Exec(callOpts, p)
